@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Debug Files
-        run: ls -R
+        run: ls -Ra
       # 1. Линт (проверка манифестов на ошибки и безопасность)
       - name: Lint Kubernetes manifests
         uses: stackrox/kube-linter-action@v1.0.4
