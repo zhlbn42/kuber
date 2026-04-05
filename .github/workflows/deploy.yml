@@ -19,5 +19,5 @@ jobs:
         username: zhlbn42
         key: ${{ secrets.SSH_KEY }}         # приватный ключ
         script: |
-          cd /root/my-project/k8s
+          cd /home/zhlbn42/kuber/k8s
           kubectl apply -f .
