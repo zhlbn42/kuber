@@ -5,7 +5,8 @@ on:
     branches: ["main"]
 
 env:
-  IMAGE_NAME: zhlbn42/myapp # Укажи свой логин на Docker Hub
+  # Замени 'your-dockerhub-user' на свой логин в Docker Hub
+  IMAGE_NAME: your-dockerhub-user/myapp
 
 jobs:
   build-and-push:
@@ -14,11 +15,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 1. Линт
+      # 1. Линт (проверка манифестов на ошибки и безопасность)
       - name: Lint Kubernetes manifests
         uses: stackrox/kube-linter-action@v1.0.4
         with:
           directory: k8s
+          # Если хочешь пока игнорировать ошибки безопасности, 
+          # создай файл .kube-linter.yaml (см. ниже)
 
       # 2. Логин в Docker Hub (через официальный экшен)
       - name: Login to Docker Hub
@@ -27,7 +30,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 3. Сборка и пуш образа
+      # 3. Сборка и пуш образа с уникальным тегом (SHA коммита)
       - name: Build and Push Docker image
         run: |
           docker build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
@@ -43,23 +46,26 @@ jobs:
           host: ${{ secrets.SERVER_IP }}
           username: zhlbn42
           key: ${{ secrets.SSH_KEY }}
-          # ПЕРЕДАЕМ ПЕРЕМЕННЫЕ НА СЕРВЕР
+          # КРИТИЧНО: пробрасываем переменные окружения на твой VPS
           envs: IMAGE_NAME, GITHUB_SHA
           script: |
             set -e
             
-            # Теперь эти переменные доступны внутри SSH-сессии
-            cd /home/zhlbn42/kuber/k8s
+            # Переходим в папку с проектом
+            cd /home/zhlbn42/kuber
             
-            # Сначала применяем манифесты (если меняли порты или лимиты)
-            kubectl apply -f .
+            # Обновляем файлы манифестов из гита
+            git pull origin main || echo "Warning: git pull failed"
             
-            # А теперь принудительно обновляем имидж на тот, что только что собрали
-            # Важно: имя контейнера (myapp) должно совпадать с тем, что в deployment.yaml
+            # 1. Применяем конфиги (Service, ConfigMap и т.д.)
+            kubectl apply -f k8s/
+            
+            # 2. Обновляем образ в Deployment на только что собранный
+            # Убедись, что в deployment.yaml контейнер называется 'myapp'
             kubectl set image deployment/myapp myapp=${{ env.IMAGE_NAME }}:${{ github.sha }}
             
-            # Ждём завершения обновления
+            # 3. Ждем, пока поды успешно перезапустятся
             kubectl rollout status deployment/myapp
             
-            # Финальный чек
+            # 4. Проверяем результат
             kubectl get pods
