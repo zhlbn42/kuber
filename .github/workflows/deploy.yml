@@ -22,7 +22,7 @@ jobs:
         uses: stackrox/kube-linter-action@v1.0.4
         with:
           directory: k8s
-          config: .kube-linter.yaml
+          config: ./.kube-linter.yaml
           # Если хочешь пока игнорировать ошибки безопасности, 
           # создай файл .kube-linter.yaml (см. ниже)
 
