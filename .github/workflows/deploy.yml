@@ -12,9 +12,14 @@ jobs:
         uses: actions/checkout@v4
 
       # 1. CI: Проверка манифестов (Lint)
-      - name: Check YAML (lint)
-        run: |
-          kubectl apply --dry-run=client -f k8s/
+      - name: Scan Kubernetes manifests (Linter)
+        uses: stackrox/kube-linter-action@v1.0.4
+        with:
+        # Указываем папку, где лежат твои манифесты
+          directory: k8s
+        # Если хочешь, чтобы билд падал при любой ошибке (рекомендуется)
+          
+      continue-on-error: false # Билд остановится, если в YAML косяк
 
       # 2. CI: Сборка образа (чтобы убедиться, что Dockerfile рабочий)
       - name: Build Docker image
