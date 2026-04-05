@@ -2,48 +2,64 @@ name: CI/CD Deploy to k3s
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
+
+env:
+  IMAGE_NAME: zhlbn42/myapp # Укажи свой логин на Docker Hub
 
 jobs:
-  build-and-test:
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 1. CI: Проверка манифестов (Lint)
-      - name: Scan Kubernetes manifests (Linter)
+      # 1. Линт
+      - name: Lint Kubernetes manifests
         uses: stackrox/kube-linter-action@v1.0.4
         with:
-        # Указываем папку, где лежат твои манифесты
           directory: k8s
-        # Если хочешь, чтобы билд падал при любой ошибке (рекомендуется)
-          
-      continue-on-error: false # Билд остановится, если в YAML косяк
 
-      # 2. CI: Сборка образа (чтобы убедиться, что Dockerfile рабочий)
-      - name: Build Docker image
+      # 2. Логин в Docker Hub (через официальный экшен)
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # 3. Сборка и пуш образа
+      - name: Build and Push Docker image
         run: |
-          docker build -t myapp:${{ github.sha }} .
+          docker build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
+          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
 
   deploy:
     runs-on: ubuntu-latest
-    needs: build-and-test # Деплой начнется ТОЛЬКО если проверки выше прошли успешно
+    needs: build-and-push
     steps:
-      - name: SSH & Deploy to k3s
+      - name: Deploy via SSH to k3s
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: zhlbn42
           key: ${{ secrets.SSH_KEY }}
+          # ПЕРЕДАЕМ ПЕРЕМЕННЫЕ НА СЕРВЕР
+          envs: IMAGE_NAME, GITHUB_SHA
           script: |
-            # Обновляем код на сервере (если там развернут git) или просто пушим манифесты
-            cd /home/zhlbn42/kuber
-            git pull origin main || echo "Not a git repo, skipping pull"
+            set -e
             
-            # Применяем изменения
-            cd k8s
+            # Теперь эти переменные доступны внутри SSH-сессии
+            cd /home/zhlbn42/kuber/k8s
+            
+            # Сначала применяем манифесты (если меняли порты или лимиты)
             kubectl apply -f .
             
-            # Проверяем статус
+            # А теперь принудительно обновляем имидж на тот, что только что собрали
+            # Важно: имя контейнера (myapp) должно совпадать с тем, что в deployment.yaml
+            kubectl set image deployment/myapp myapp=${{ env.IMAGE_NAME }}:${{ github.sha }}
+            
+            # Ждём завершения обновления
+            kubectl rollout status deployment/myapp
+            
+            # Финальный чек
             kubectl get pods
