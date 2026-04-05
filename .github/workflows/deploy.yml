@@ -1,0 +1,23 @@
+name: Deploy to k3s
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: SSH & Deploy to k3s
+      uses: appleboy/ssh-action@v1
+      with:
+        host: ${{ secrets.SERVER_IP }}      # IP master VPS
+        username: root
+        key: ${{ secrets.SSH_KEY }}         # приватный ключ
+        script: |
+          cd /root/my-project/k8s
+          kubectl apply -f .
